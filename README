@@ -1,0 +1,8 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=1146
+
+This script defines a function Implement(), that when called from a C++ header file generates a skeleton implementation of the classes defined in the header, in a new vertical window.
+
+This is great for defining and documenting the interface to a class and then using this function to generate a skeleton implementation to be filled in.
+
+TODO: Handle functions outside of classes and thus C compatibility.
+            Implement static member initialization.
