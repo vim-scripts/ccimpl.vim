@@ -36,7 +36,7 @@ endfunction
 
 function s:ExtractToken(s)
 	" Search for a label
-	let found = match(a:s, "\\s*\\w\\{-}:")
+	let found = match(a:s, "\\s*\\w\\{-}[^:]:[^:]")
 	if found != -1
 		return stridx(a:s, ":")
 	else
@@ -46,7 +46,7 @@ function s:ExtractToken(s)
 			return stridx(a:s, ";")
 		else
 			" Search for the end of a class
-			let found = match(a:s, "\s*}")
+			let found = match(a:s, "\\s*}")
 			if found != -1
 				return stridx(a:s, "}")
 			else
@@ -68,7 +68,7 @@ endfunction
 
 function s:ParseClass()
 	" Get the class name
-	exe "normal w\"cyw]]j"
+	exe "normal w\"cye/{\<cr>j"
 	let class = getreg('c')
 
 	" Parse the class declaration
@@ -130,12 +130,13 @@ function s:ParseClass()
 				let token = substitute(token, "virtual ", "", "g")
 				let token = substitute(token, "static ", "", "g")
 				let token = substitute(token, "\<cr>\\s* [*] ", "\<cr>", "g")
+				let token = substitute(token, "\<cr>\\s* [*]", "\<cr>", "g")
 				let token = substitute(token, "\\(\\i*\\)(", class . "::\\1(", "")
 				let token = substitute(token, " = *0 *;$", "", "")
 				let token = substitute(token, ";\\s*$", "", "")
 				let token = substitute(token, "\<cr>\\s*", "\<cr>", "g")
 				let token = substitute(token, "^\\s*", "", "g")
-				exe "normal i" . token . "\<Esc>"
+				exe "normal ddo" . token . "\<Esc>"
 				exe "normal o{\<cr>}\<cr>"
 
 				" Insert spacing after the function
@@ -151,11 +152,7 @@ function s:ParseClass()
 			endif
 		elseif strpart(token, strlen(token) - 1) == ":"
 			" Label - no processing required
-		elseif strpart(token, strlen(token) - 2) == "*/"
-			" Comment block
-			let comment = substitute(token, " * ", "\<CR> * ", "g")
-			let comment = substitute(comment, "^[ \t]*/[*][*]", "/[*][*]", "")
-		elseif token == "}"
+		elseif strpart(token, strlen(token) - 1) == "}"
 			" End of class
 			let done = 1
 		else
@@ -193,13 +190,27 @@ function Implement()
 			call s:SwitchWindows()
 			exe "normal Gk2ddo#include \"" . s:header . "\"\<Esc>o"
 			let i = 0
-			while i < g:InterFunctionGap
+			while i < g:InterFunctionGap - 1
 				normal o
 				let i = i + 1
 			endwhile
 
 			" Switch back to the header file
 			call s:SwitchWindows()
+
+			" Insert any namespace present
+			let lastline = -1
+			exe "normal gg/namespace\<CR>"
+			if lastline < line(".")
+				exe "normal v/{\<cr>\"cy"
+				call s:SwitchWindows()
+				normal P
+				exe "normal /{\<CR>o"
+				call s:SwitchWindows()
+				let s:Namespace = 1
+			else
+				let s:Namespace = 0
+			endif
 
 			" For each class declared...
 			let lastline = -1
@@ -217,8 +228,12 @@ function Implement()
 			normal 'Z
 			let &l:foldenable = s:oldfold
 			call s:SwitchWindows()
+			normal dk
+			if s:Namespace == 1
+				normal O}
+			endif
 			set nofoldenable
-			normal dkgg]]o
+			exe "normal gg/{\\n\\s*}\<CR>o"
 		endif
 	endif
 endfunction
