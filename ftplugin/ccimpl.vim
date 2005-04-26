@@ -4,6 +4,9 @@
 "
 " Author: Neil Vice
 " Date:   01 December 2004
+" 
+" Updated 26/04/05 to prevent the absence of a namespace declaration from
+" causing errors.
 "
 
 " Determines the number of lines to leave between functions
@@ -120,7 +123,7 @@ function s:ParseClass()
 		" Determine token type
 		if strpart(token, strlen(token) - 1) == ";"
 			" Function or Attribute
-			if match(token, "[^{};]*[^;{})]([^{}();]*)[^;(){}]*;$") != -1
+			if match(token, "[^{};]*[^;{})]([^{}();]*)[^;(){}0]*;$") != -1
 			
 				" Function
 				call s:SwitchWindows()
@@ -190,7 +193,7 @@ function Implement()
 			call s:SwitchWindows()
 			exe "normal Gk2ddo#include \"" . s:header . "\"\<Esc>o"
 			let i = 0
-			while i < g:InterFunctionGap - 1
+			while i < g:InterFunctionGap
 				normal o
 				let i = i + 1
 			endwhile
@@ -199,8 +202,12 @@ function Implement()
 			call s:SwitchWindows()
 
 			" Insert any namespace present
-			let lastline = -1
-			exe "normal gg/namespace\<CR>"
+			normal gg
+			let lastline = line(".")
+			try
+				exe "normal /namespace\<CR>"
+			catch *
+			endtry
 			if lastline < line(".")
 				exe "normal v/{\<cr>\"cy"
 				call s:SwitchWindows()
@@ -214,14 +221,14 @@ function Implement()
 
 			" For each class declared...
 			let lastline = -1
-			exe "normal /class\<CR>"
+			exe "normal /^\\s*class\<CR>"
 			while lastline < line(".")
 				" Parse the class declaration
 				call s:ParseClass()
 
 				" Search for another class
 				let lastline = line(".")
-				exe "normal /class\<CR>"
+				exe "normal /^\\s*class\<CR>"
 			endwhile
 
 			" Re-enable folding and return cursor position (in orig window)
