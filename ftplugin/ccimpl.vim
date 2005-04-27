@@ -5,6 +5,10 @@
 " Author: Neil Vice
 " Date:   01 December 2004
 " 
+" Updated 27/04/05 to handle default parameters and brackets in Doxygen
+" comments as well as adding the g:fnTypeSepLine flag. Also should be more
+" compatible with other plugins that provide windows e.g. minibufexpl.
+" 
 " Updated 26/04/05 to prevent the absence of a namespace declaration from
 " causing errors.
 "
@@ -14,9 +18,20 @@ if !exists("g:InterFunctionGap")
 	let g:InterFunctionGap = 2
 endif
 
+" Defaults to not forcing a new-line after the return type
+if !exists("g:fnTypeSepLine")
+	let g:fnTypeSepLine = 0
+endif
+
 function s:SwitchWindows()
+	if bufnr('%') != s:h_buf
+		exe bufwinnr(s:h_buf) . " wincmd w"
+	else
+		exe bufwinnr(s:c_buf) . " wincmd w"
+	endif
+	
 	" Switch to the last window 0 used to switch between two windows
-	exe "normal \<c-w>p"
+	" normal \<c-w>p
 endfunction
 
 function CopyDescriptionToLastWindow()
@@ -127,27 +142,54 @@ function s:ParseClass()
 			
 				" Function
 				call s:SwitchWindows()
+
+				" Remove all leading spaces
+				let token = substitute(token, "^\\s*", "", "g")
+
+				" Remove 'virtual' and 'static' keywords
+				let token = substitute(token, "^virtual ", "", "g")
+				let token = substitute(token, "^static ", "", "g")
+
+				" Remove default values
+				let token = substitute(token, "\\s*=\\s*[^,)]*", "", "g")
+
+				" Insert class name
+				if match(token, "/[*][*]") != -1
+					let token = substitute(token, "\\(/[*][*]\\_.\\{-}[*]/\\_.\\{-}\\)\\(\\i*\\s*\\)(", "\\1" . class . "::\\2(", "")
+				else
+					let token = substitute(token, "\\(\\i*\\s*\\)(", class . "::\\1(", "")
+				endif
+
+				" Remove trailing semicolon
+				let token = substitute(token, ";\\s*$", "", "")
+
+				" Separate return type onto new line if requested 
+				if g:fnTypeSepLine == 1
+					if match(token, "\<cr>\\s*" . class . "::") == -1
+						let token = substitute(token, "^\\(\\s*.\\{-}\\)" . class . "::", "\\1\<cr>" . class . "::", "")
+					endif
+				endif
+
+				" Nicely format Doxygen comments for use with C++ syntax macros
 				let token = substitute(token, "\\s*/[*][*]", "/**", "")
 				"let token = substitute(token, "\\(/[*][*].\\{-}\\) [*] ", "\\1\<cr>", "g")
 				let token = substitute(token, "\\(/[*][*].*\\)\<cr>\\s*[*]/\\s*\<cr>", "\\1\<cr>/\<cr>", "g")
-				let token = substitute(token, "virtual ", "", "g")
-				let token = substitute(token, "static ", "", "g")
 				let token = substitute(token, "\<cr>\\s* [*] ", "\<cr>", "g")
 				let token = substitute(token, "\<cr>\\s* [*]", "\<cr>", "g")
-				let token = substitute(token, "\\(\\i*\\)(", class . "::\\1(", "")
-				let token = substitute(token, " = *0 *;$", "", "")
-				let token = substitute(token, ";\\s*$", "", "")
 				let token = substitute(token, "\<cr>\\s*", "\<cr>", "g")
-				let token = substitute(token, "^\\s*", "", "g")
-				exe "normal ddo" . token . "\<Esc>"
-				exe "normal o{\<cr>}\<cr>"
 
-				" Insert spacing after the function
-				let i = 0
-				while i < g:InterFunctionGap
-					exe "normal o\<Esc>"
-					let i = i + 1
-				endwhile
+				" If the functions is abstract then ignore
+				if match(token, " = *0 *;$") == -1
+					exe "normal ddo" . token . "\<Esc>"
+					exe "normal o{\<cr>}\<cr>"
+
+					" Insert spacing after the function
+					let i = 0
+					while i < g:InterFunctionGap
+						exe "normal o\<Esc>"
+						let i = i + 1
+					endwhile
+				endif
 
 				call s:SwitchWindows()
 			else
@@ -168,6 +210,9 @@ function Implement()
 	" Ensure this is a header file
 	if expand("%:e") == "h"
 		mark Z
+
+		" Store the buffer number for the header
+		let s:h_buf = bufnr('%')
 		
 		" Open the implementation in a new window
 		let s:file = expand("%:p:r") . ".cc"
@@ -175,6 +220,9 @@ function Implement()
 		silent "w " . s:file
 		exe "normal \<c-w>v"
 		exe "e " . s:file
+
+		" Store the buffer number for the implementation
+		let s:c_buf = bufnr('%')
 
 		" If an implementation didn't already exist
 		if filereadable(s:file) == 0
@@ -192,11 +240,6 @@ function Implement()
 			" Insert an include line for the header
 			call s:SwitchWindows()
 			exe "normal Gk2ddo#include \"" . s:header . "\"\<Esc>o"
-			let i = 0
-			while i < g:InterFunctionGap
-				normal o
-				let i = i + 1
-			endwhile
 
 			" Switch back to the header file
 			call s:SwitchWindows()
