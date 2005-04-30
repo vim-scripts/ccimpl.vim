@@ -5,6 +5,10 @@
 " Author: Neil Vice
 " Date:   01 December 2004
 " 
+" Updated 01/05/05 to correctly handle destructors and ignore "method-like"
+" constructs in attribute comments. Now does not copy comments to the
+" implementation by default - added g:implComments for this purpose.
+" 
 " Updated 27/04/05 to handle default parameters and brackets in Doxygen
 " comments as well as adding the g:fnTypeSepLine flag. Also should be more
 " compatible with other plugins that provide windows e.g. minibufexpl.
@@ -21,6 +25,11 @@ endif
 " Defaults to not forcing a new-line after the return type
 if !exists("g:fnTypeSepLine")
 	let g:fnTypeSepLine = 0
+endif
+
+" Defaults to NOT copy comments across to implementation
+if !exists("g:implComments")
+	let g:implComments = 0
 endif
 
 function s:SwitchWindows()
@@ -105,7 +114,7 @@ function s:ParseClass()
 		endif
 
 		" Skip single-line comments & empty lines
-		while done == 0 && match(line, "^\\s*//") != -1 || match(line, "^\\s*$") != -1
+		while done == 0 && (match(line, "^\\s*//") != -1 || match(line, "^\\s*$") != -1)
 			let line = getline(line("."))
 			let done = s:DownCheckEOF()
 		endwhile
@@ -137,10 +146,21 @@ function s:ParseClass()
 
 		" Determine token type
 		if strpart(token, strlen(token) - 1) == ";"
-			" Function or Attribute
-			if match(token, "[^{};]*[^;{})]([^{}();]*)[^;(){}0]*;$") != -1
-			
-				" Function
+			" Determine whether we've got a Method or Attribute
+			let type = "attribute"
+			if match(token, "/[*][*]") != -1
+				" Ignore brackets etc. in comments
+				if match(token, "/[*][*]\\_.\\{-}[*]/\\_.\\{-}[^{};]*[^;{})]([^{}();]*)[^;(){}0]*;$") != -1
+					let type = "method"
+				endif
+			else
+				if match(token, "[^{};]*[^;{})]([^{}();]*)[^;(){}0]*;$") != -1
+					let type = "method"
+				endif
+			endif
+
+			" Method
+			if type == "method"
 				call s:SwitchWindows()
 
 				" Remove all leading spaces
@@ -155,9 +175,9 @@ function s:ParseClass()
 
 				" Insert class name
 				if match(token, "/[*][*]") != -1
-					let token = substitute(token, "\\(/[*][*]\\_.\\{-}[*]/\\_.\\{-}\\)\\(\\i*\\s*\\)(", "\\1" . class . "::\\2(", "")
+					let token = substitute(token, "\\(/[*][*]\\_.\\{-}[*]/\\_.\\{-}\\)\\([~]\\?\\i*\\s*\\)(", "\\1" . class . "::\\2(", "")
 				else
-					let token = substitute(token, "\\(\\i*\\s*\\)(", class . "::\\1(", "")
+					let token = substitute(token, "\\([~]\\?\\i*\\s*\\)(", class . "::\\1(", "")
 				endif
 
 				" Remove trailing semicolon
@@ -165,17 +185,26 @@ function s:ParseClass()
 
 				" Separate return type onto new line if requested 
 				if g:fnTypeSepLine == 1
-					if match(token, "\<cr>\\s*" . class . "::") == -1
+					if match(token, "\<cr>\\s*" . class . "::") == -1 && match(token, "^\\s*" . class . "::") == -1
 						let token = substitute(token, "^\\(\\s*.\\{-}\\)" . class . "::", "\\1\<cr>" . class . "::", "")
 					endif
 				endif
 
-				" Nicely format Doxygen comments for use with C++ syntax macros
-				let token = substitute(token, "\\s*/[*][*]", "/**", "")
-				"let token = substitute(token, "\\(/[*][*].\\{-}\\) [*] ", "\\1\<cr>", "g")
-				let token = substitute(token, "\\(/[*][*].*\\)\<cr>\\s*[*]/\\s*\<cr>", "\\1\<cr>/\<cr>", "g")
-				let token = substitute(token, "\<cr>\\s* [*] ", "\<cr>", "g")
-				let token = substitute(token, "\<cr>\\s* [*]", "\<cr>", "g")
+				" If not requested, remove all comments
+				if g:implComments == 0
+					let token = substitute(token, "/[*][*].*\<cr>\\s*[*]/\\s*\<cr>", "", "g")
+				else
+					" Nicely format Doxygen comments for use with C++ syntax macros
+					let token = substitute(token, "\\s*/[*][*]", "/**", "")
+					"let token = substitute(token, "\\(/[*][*].\\{-}\\) [*] ", "\\1\<cr>", "g")
+					let token = substitute(token, "\\(/[*][*].*\\)\<cr>\\s*[*]/\\s*\<cr>", "\\1\<cr>/\<cr>", "g")
+					let token = substitute(token, "\<cr>\\s* [*] ", "\<cr>", "g")
+					let token = substitute(token, "\<cr>\\s* [*]", "\<cr>", "g")
+				endif
+
+				" Remove leading whitespace & newlines
+				let token = substitute(token, "^\<cr>*", "", "")
+				let token = substitute(token, "^\\s*", "", "g")
 				let token = substitute(token, "\<cr>\\s*", "\<cr>", "g")
 
 				" If the functions is abstract then ignore
@@ -240,6 +269,11 @@ function Implement()
 			" Insert an include line for the header
 			call s:SwitchWindows()
 			exe "normal Gk2ddo#include \"" . s:header . "\"\<Esc>o"
+			let i = 0
+			while i < g:InterFunctionGap
+				exe "normal o\<Esc>"
+				let i = i + 1
+			endwhile
 
 			" Switch back to the header file
 			call s:SwitchWindows()
