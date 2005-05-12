@@ -2,8 +2,12 @@
 " Defines a command 'Implement' to generate a skeleton implementation
 " of a class from a C++ header file containing one or more class declarations.
 "
-" Author: Neil Vice
-" Date:   01 December 2004
+" Author:   Neil Vice
+" Created:  01/12/05
+" Modified: 12/05/05
+" 
+" Updated 12/05/05, adding 'g:cxx_extension' to use as file-extension for
+" generated source files.
 " 
 " Updated 01/05/05 to correctly handle destructors and ignore "method-like"
 " constructs in attribute comments. Now does not copy comments to the
@@ -16,6 +20,11 @@
 " Updated 26/04/05 to prevent the absence of a namespace declaration from
 " causing errors.
 "
+
+" Default C++ file extension to .cpp
+if !exists("g:cxx_extension")
+	let g:cxx_extension = "cpp"
+endif
 
 " Determines the number of lines to leave between functions
 if !exists("g:InterFunctionGap")
@@ -244,7 +253,7 @@ function Implement()
 		let s:h_buf = bufnr('%')
 		
 		" Open the implementation in a new window
-		let s:file = expand("%:p:r") . ".cc"
+		let s:file = expand("%:p:r") . "." . g:cxx_extension
 		let s:header = expand("%")
 		silent "w " . s:file
 		exe "normal \<c-w>v"
