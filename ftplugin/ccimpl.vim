@@ -5,6 +5,10 @@
 " Author:   Neil Vice
 " Created:  01/12/05
 " Modified: 12/05/05
+"
+" Updated 12/05/05 - fixed bug where header include was not inserted with the
+" absence of a header-maintaining plugin. Fixed bug where if InterFunctionGap
+" was set to 1 a newline would not be inserted at end-of-file.
 " 
 " Updated 12/05/05, adding 'g:cxx_extension' to use as file-extension for
 " generated source files.
@@ -254,7 +258,7 @@ function Implement()
 		
 		" Open the implementation in a new window
 		let s:file = expand("%:p:r") . "." . g:cxx_extension
-		let s:header = expand("%")
+		let s:header = expand("%:t")
 		silent "w " . s:file
 		exe "normal \<c-w>v"
 		exe "e " . s:file
@@ -277,7 +281,7 @@ function Implement()
 
 			" Insert an include line for the header
 			call s:SwitchWindows()
-			exe "normal Gk2ddo#include \"" . s:header . "\"\<Esc>o"
+			exe "normal o#include \"" . s:header . "\"\<Esc>o"
 			let i = 0
 			while i < g:InterFunctionGap
 				exe "normal o\<Esc>"
@@ -326,6 +330,9 @@ function Implement()
 				normal O}
 			endif
 			set nofoldenable
+			if g:InterFunctionGap < 2
+				exe "normal Go\<Esc>"
+			endif
 			exe "normal gg/{\\n\\s*}\<CR>o"
 		endif
 	endif
