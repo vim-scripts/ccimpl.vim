@@ -6,6 +6,10 @@
 " Created:  01/12/05
 " Modified: 12/05/05
 "
+" Updated 10/12/05, adding 'g:h_extensions' as a comma-separated list of
+" header-file extensions to support. Also improved robustness and fixed
+" some minor issues.
+" 
 " Updated 12/05/05 - fixed bug where header include was not inserted with the
 " absence of a header-maintaining plugin. Fixed bug where if InterFunctionGap
 " was set to 1 a newline would not be inserted at end-of-file.
@@ -30,9 +34,14 @@ if !exists("g:cxx_extension")
 	let g:cxx_extension = "cpp"
 endif
 
+" Default C++ header extensions
+if !exists("g:h_extensions")
+	let g:h_extensions = "h,hxx,hh,hpp"
+endif
+
 " Determines the number of lines to leave between functions
 if !exists("g:InterFunctionGap")
-	let g:InterFunctionGap = 2
+	let g:InterFunctionGap = 1
 endif
 
 " Defaults to not forcing a new-line after the return type
@@ -68,8 +77,10 @@ function CopyDescriptionToLastWindow()
 		endwhile
 		exe "normal \"ay"
 		call s:SwitchWindows()
-		exe "4"
-		exe "normal dd\"aP"
+		if match(getline(1), '/[*][*][ \t]*$') != -1 && match(getline(4), '^ [*] .*') != -1
+			exe "4"
+			exe "normal dd\"aP"
+		endif
 		call s:SwitchWindows()
 	endif
 endfunction
@@ -248,9 +259,23 @@ function s:ParseClass()
 	endwhile
 endfunction
 
+function! IsExtensionHeader(ext)
+	let header = 0
+	let i = 1
+	let x = "h"
+	while x != "" && header == 0
+		let x = GetNthItemFromList(g:h_extensions, i)
+		if a:ext == x
+			let header = 1
+		endif
+		let i = i + 1
+	endwhile
+	return header
+endfunction
+
 function Implement()
 	" Ensure this is a header file
-	if expand("%:e") == "h"
+	if IsExtensionHeader(expand("%:e")) != 0
 		mark Z
 
 		" Store the buffer number for the header
@@ -281,7 +306,7 @@ function Implement()
 
 			" Insert an include line for the header
 			call s:SwitchWindows()
-			exe "normal o#include \"" . s:header . "\"\<Esc>o"
+			exe "normal Go#include \"" . s:header . "\"\<Esc>o"
 			let i = 0
 			while i < g:InterFunctionGap
 				exe "normal o\<Esc>"
@@ -310,16 +335,19 @@ function Implement()
 			endif
 
 			" For each class declared...
-			let lastline = -1
-			exe "normal /^\\s*class\<CR>"
-			while lastline < line(".")
-				" Parse the class declaration
-				call s:ParseClass()
-
-				" Search for another class
-				let lastline = line(".")
+			try
+				let lastline = -1
 				exe "normal /^\\s*class\<CR>"
-			endwhile
+				while lastline < line(".")
+					" Parse the class declaration
+					call s:ParseClass()
+
+					" Search for another class
+					let lastline = line(".")
+					exe "normal /^\\s*class\<CR>"
+				endwhile
+			catch *
+			endtry
 
 			" Re-enable folding and return cursor position (in orig window)
 			normal 'Z
@@ -333,9 +361,46 @@ function Implement()
 			if g:InterFunctionGap < 2
 				exe "normal Go\<Esc>"
 			endif
-			exe "normal gg/{\\n\\s*}\<CR>o"
+			try
+				exe "normal gg/{\\n\\s*}\<CR>"
+				exe "normal o"
+			catch *
+			endtry
 		endif
 	endif
+endfunction
+
+" Function : GetNthItemFromList (PRIVATE)
+" Purpose  : Support reading items from a comma seperated list
+"            Used to iterate all the extensions in an extension spec
+"            Used to iterate all path prefixes
+" Args     : list -- the list (extension spec, file paths) to iterate
+"            n -- the extension to get
+" Returns  : the nth item (extension, path) from the list (extension 
+"            spec), or "" for failure
+" Author   : Michael Sharpe <feline@irendi.com>
+"            Taken from the a.vim plugin.
+function! GetNthItemFromList(list, n) 
+   let itemStart = 0
+   let itemEnd = -1
+   let pos = 0
+   let item = ""
+   let i = 0
+   while (i != a:n)
+      let itemStart = itemEnd + 1
+      let itemEnd = match(a:list, ",", itemStart)
+      let i = i + 1
+      if (itemEnd == -1)
+         if (i == a:n)
+            let itemEnd = strlen(a:list)
+         endif
+         break
+      endif
+   endwhile 
+   if (itemEnd != -1) 
+      let item = strpart(a:list, itemStart, itemEnd - itemStart)
+   endif
+   return item 
 endfunction
 
 command Implement call Implement()
